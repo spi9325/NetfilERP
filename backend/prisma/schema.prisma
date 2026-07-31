@@ -1,0 +1,183 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum CustomerStatus {
+  Active
+  Inactive
+}
+
+enum Role {
+  OWNER
+  SALES
+  PRODUCTION
+  ACCOUNTS
+}
+
+enum QuotationStatus {
+  DRAFT
+  SENT
+  ACCEPTED
+  REJECTED
+}
+
+enum POStatus {
+  PENDING_REVIEW
+  UNDER_DISCUSSION
+  APPROVED
+  REJECTED
+}
+
+model User {
+  id        String   @id @default(uuid())
+  name      String
+  email     String   @unique
+  role      Role
+  createdAt DateTime @default(now())
+
+  quotationVersions QuotationVersion[]
+  poVerifications   POVerification[]
+  documents         Document[]
+}
+
+model Customer {
+  id             String         @id @default(uuid())
+  customerName   String
+  customerCode   String         @unique
+  contactPerson  String?
+  email          String
+  mobileNumber   String?
+  gstNumber      String?
+  address        String?
+  state          String?
+  status         CustomerStatus @default(Active)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  quotations  Quotation[]
+  workOrders  WorkOrder[]
+}
+
+model Quotation {
+  id                String            @id @default(uuid())
+  customerId        String
+  customer          Customer          @relation(fields: [customerId], references: [id])
+  status            QuotationStatus   @default(DRAFT)
+  currentVersionId  String?           @unique
+  currentVersion    QuotationVersion? @relation("CurrentVersion", fields: [currentVersionId], references: [id])
+  createdAt         DateTime          @default(now())
+
+  versions       QuotationVersion[] @relation("AllVersions")
+  workOrders     WorkOrder[]
+  purchaseOrders PurchaseOrder[]
+}
+
+model QuotationVersion {
+  id                String    @id @default(uuid())
+  quotationId       String
+  quotation         Quotation @relation("AllVersions", fields: [quotationId], references: [id])
+  versionNumber     Int
+  price             Decimal
+  quantity          Int
+  deliveryAddress   String
+  paymentTerms      String
+  transportTerms    String
+  transportCharges  Decimal
+  changeNote        String?
+  createdById       String
+  createdBy         User      @relation(fields: [createdById], references: [id])
+  createdAt         DateTime  @default(now())
+
+  currentFor      Quotation?       @relation("CurrentVersion")
+  poVerifications POVerification[]
+
+  @@unique([quotationId, versionNumber])
+}
+
+model PurchaseOrder {
+  id                String    @id @default(uuid())
+  poNumber          String    @unique
+  quotationId       String
+  quotation         Quotation @relation(fields: [quotationId], references: [id])
+  price             Decimal
+  quantity          Int
+  deliveryAddress   String
+  paymentTerms      String
+  transportTerms    String
+  transportCharges  Decimal
+  status            POStatus  @default(PENDING_REVIEW)
+  createdAt         DateTime  @default(now())
+
+  workOrder     WorkOrder?
+  verifications POVerification[]
+}
+
+model POVerification {
+  id                 String   @id @default(uuid())
+  poId               String
+  purchaseOrder      PurchaseOrder    @relation(fields: [poId], references: [id])
+  quotationVersionId String
+  quotationVersion   QuotationVersion @relation(fields: [quotationVersionId], references: [id])
+  fieldName          String
+  poValue            String
+  quotationValue     String
+  isMismatch         Boolean
+  changedById        String?
+  changedBy          User?    @relation(fields: [changedById], references: [id])
+  checkedAt          DateTime @default(now())
+}
+
+model WorkOrder {
+  id              String         @id @default(uuid())
+  woNumber        String         @unique
+  customerId      String
+  customer        Customer       @relation(fields: [customerId], references: [id])
+  quotationId     String?
+  quotation       Quotation?     @relation(fields: [quotationId], references: [id])
+  purchaseOrderId String?        @unique
+  purchaseOrder   PurchaseOrder? @relation(fields: [purchaseOrderId], references: [id])
+  createdAt       DateTime       @default(now())
+
+  drawings        Drawing[]
+  productionMemos ProductionMemo[]
+  documents       Document[]
+}
+
+model Drawing {
+  id          String    @id @default(uuid())
+  workOrderId String
+  workOrder   WorkOrder @relation(fields: [workOrderId], references: [id])
+  fileUrl     String
+  version     Int       @default(1)
+  uploadedAt  DateTime  @default(now())
+}
+
+model ProductionMemo {
+  id          String    @id @default(uuid())
+  workOrderId String
+  workOrder   WorkOrder @relation(fields: [workOrderId], references: [id])
+  notes       String
+  createdAt   DateTime  @default(now())
+}
+
+model Document {
+  id             String    @id @default(uuid())
+  workOrderId    String
+  workOrder      WorkOrder @relation(fields: [workOrderId], references: [id])
+  docType        String
+  fileUrl        String
+  visibleToRoles Role[]
+  uploadedById   String
+  uploadedBy     User      @relation(fields: [uploadedById], references: [id])
+  uploadedAt     DateTime  @default(now())
+}
